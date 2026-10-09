@@ -9,7 +9,8 @@ import hPyT
 
 
 from login_core import GameClient, OpType, build_hex
-from config import get_exe_path, SERVER_IP, SERVER_PORT, GAME_OP, DEBUG, show_console_if_debug
+from mir_core import create_client
+from config import get_exe_path, SERVER_IP, SERVER_PORT, GAME_OP, DEBUG, PROTOCOL, show_console_if_debug
 
 
 class GameLauncherUI:
@@ -49,15 +50,18 @@ class GameLauncherUI:
 
 
 
-        self.client = GameClient(SERVER_IP, SERVER_PORT)
+        self.client = create_client(PROTOCOL, SERVER_IP, SERVER_PORT)
         try:
             self.client.connect()
         except Exception as e:
             print(f"连接服务器失败 SERVER_IP={SERVER_IP}, SERVER_PORT={SERVER_PORT}: {e}")
-            messagebox.showerror("无法连接服务器", 
+            messagebox.showerror("无法连接服务器",
                                 f"请检查网络连接或服务器状态\n检测配置文件 login.ini 是否正确\n")
             master.destroy()
             return
+
+        self.user = None
+        self.password = None
 
         master.bind("<Return>", lambda *_: self.on_login())
         self.create_login_ui()
@@ -169,9 +173,12 @@ class GameLauncherUI:
         u, p = self.entry_user.get().strip(), self.entry_pass.get().strip()
         if not u or not p:
             return
-        hex_data = build_hex(OpType.LOGIN, u, p)
-        result = self.client.send_and_receive(hex_data, OpType.LOGIN)
+        result = self.client.login(u, p)
         if result["code"] == 200:
+            self.user, self.password = u, p
+            if not result["data"]:
+                messagebox.showerror("登录失败", "区服列表为空, 请检查 AccountServer 工作目录的 server 文件")
+                return
             self.create_zone_ui(result["data"])
         else:
             messagebox.showerror("登录失败", result["message"])
@@ -181,21 +188,19 @@ class GameLauncherUI:
         p = self.entry_pass.get().strip()
         q = self.entry_q.get().strip()
         a = self.entry_a.get().strip()
-        hex_data = build_hex(OpType.REGISTER, u, p, q, a)
-        result = self.client.send_and_receive(hex_data, OpType.REGISTER)
+        result = self.client.register(u, p, q, a)
         if result["code"] == 200:
             messagebox.showinfo("注册成功", "注册成功！")
             self.create_login_ui()
         else:
-            messagebox.showerror("注册失败", result["message"])
+            messagebox.showerror("注册失败", result["message"] + "\n\n(要求: 账号6-12位字母开头, 密码6-18位, 密保问题和答案2-18位)")
 
     def on_recover(self):
         u = self.entry_user.get().strip()
         p = self.entry_pass.get().strip()
         q = self.entry_q.get().strip()
         a = self.entry_a.get().strip()
-        hex_data = build_hex(OpType.RECOVER, u, p, q, a)
-        result = self.client.send_and_receive(hex_data, OpType.RECOVER)
+        result = self.client.recover(u, p, q, a)
         if result["code"] == 200:
             messagebox.showinfo("修改成功", "密码已修改")
             self.create_login_ui()
@@ -211,8 +216,7 @@ class GameLauncherUI:
         zone = next((z for z in self.zones if z["name"] == zone_name), None)
         if not zone:
             return
-        hex_data = build_hex(OpType.START_GAME, zone["ip"], zone["port"])
-        result = self.client.send_and_receive(hex_data, OpType.START_GAME)
+        result = self.client.start_game(zone)
         if result["code"] == 200:
             self.launch_game(zone, result["data"])
         else:
@@ -225,7 +229,7 @@ class GameLauncherUI:
             f"/ip:1,1,{zone['ip']} /port:{zone['port']} "
             f"/ticket:{ticket} /AreaName:{zone['name']}"
         )
-        subprocess.Popen([exe_path] + args.split(), shell=True)
+        subprocess.Popen([exe_path] + args.split(), cwd=os.path.dirname(exe_path))
 
     def _labeled_entry(self, parent, text, **entry_kw):
         tb.Label(parent, text=text, font=self.base_font).pack(anchor=W, pady=(10, 4))

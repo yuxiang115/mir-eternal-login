@@ -15,7 +15,10 @@ GAME_FOLDER_PATH = BASE_DIR
 
 # 默认服务器配置
 SERVER_IP = "127.0.0.1"  # 默认服务器 IP
-SERVER_PORT = 8001
+SERVER_PORT = 7000
+
+# 登录协议: udp = mir-eternal AccountServer, tcp = 旧版二进制协议
+PROTOCOL = "udp"
 
 # 默认操作模式（32 或 64）
 GAME_OP = 32
@@ -29,10 +32,11 @@ def read_config():
     从配置文件读取服务器 IP、端口和操作模式
     如果文件不存在，使用默认值并写入配置文件
     """
-    config_path = "./login.ini"
+    config_path = os.path.join(BASE_DIR, "login.ini")
     config = {
         "server_ip": SERVER_IP,
         "server_port": SERVER_PORT,
+        "protocol": PROTOCOL,
         "game_op": GAME_OP
     }
 
@@ -44,7 +48,7 @@ def read_config():
 
     with open(config_path, 'r') as f:
         for line in f:
-            key, value = line.strip().split('=')
+            key, value = line.strip().split('=', 1)
             config[key] = value
 
     return config
@@ -70,10 +74,11 @@ config = read_config()  # 初始化配置文件，如果不存在则创建
 GAME_OP = config.get("game_op", GAME_OP)
 SERVER_IP = config.get("server_ip", SERVER_IP)
 SERVER_PORT = int(config.get("server_port", SERVER_PORT))
+PROTOCOL = config.get("protocol", PROTOCOL)
 GAME_FOLDER_PATH = config.get("game_path", GAME_FOLDER_PATH)
 GAME_FOLDER_PATH = GAME_FOLDER_PATH.strip().strip('"').strip("'").rstrip(r"\/")
 DEBUG = config.get("debug", "0") == "1"
-print(f"✅ 读取配置: IP={SERVER_IP}, 端口={SERVER_PORT}, 操作模式={GAME_OP}, 路径={GAME_FOLDER_PATH}, 调试模式={DEBUG}")
+print(f"✅ 读取配置: IP={SERVER_IP}, 端口={SERVER_PORT}, 协议={PROTOCOL}, 操作模式={GAME_OP}, 路径={GAME_FOLDER_PATH}, 调试模式={DEBUG}")
 
 
 def show_console_if_debug(debug):
