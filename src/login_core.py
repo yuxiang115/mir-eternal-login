@@ -1,5 +1,6 @@
 import socket
 import re
+import struct
 
 class OpType:
     LOGIN = (0x00, 0x05)
@@ -33,6 +34,7 @@ class GameClient:
         self.server_ip = server_ip
         self.server_port = server_port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.settimeout(5.0)
 
     def connect(self):
         self.socket.connect((self.server_ip, self.server_port))
@@ -50,12 +52,32 @@ class GameClient:
 
         try:
             self.socket.sendall(data)
-            resp = self.socket.recv(1024)
+            resp = self._receive_frame()
         except Exception as e:
             print("网络通信失败:", e)
             return { "code": 500, "message": "网络通信失败" }
 
         return self.parse_response(resp, expected_op)
+
+    def _receive_exact(self, length):
+        chunks = bytearray()
+        while len(chunks) < length:
+            chunk = self.socket.recv(length - len(chunks))
+            if not chunk:
+                raise ConnectionError("账号服务器提前断开连接")
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def _receive_frame(self):
+        """Frame = [op:2][length:u16 LE][payload]; register/recover success are fixed 2-byte frames."""
+        header = self._receive_exact(2)
+        if header in (bytes((0x02, 0x05)), bytes((0x04, 0x05))):
+            return header
+        length_bytes = self._receive_exact(2)
+        length = struct.unpack('<H', length_bytes)[0]
+        if length < 4:
+            raise ValueError("账号响应帧长度错误")
+        return header + length_bytes + self._receive_exact(length - 4)
 
     def parse_response(self, resp, expected_op=None):
         if len(resp) < 2:

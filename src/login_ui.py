@@ -10,12 +10,14 @@ import hPyT
 
 from login_core import GameClient, OpType, build_hex
 from mir_core import create_client
+from game_start import start_game as start_game_process
 from config import get_exe_path, SERVER_IP, SERVER_PORT, GAME_OP, DEBUG, PROTOCOL, show_console_if_debug
 
 
 class GameLauncherUI:
     def __init__(self, master: tb.Window):
         self.master = master
+        self.master.report_callback_exception = self.report_callback_error
         self.master.title("传奇永恒")
         self.master.resizable(False, False)
     
@@ -224,12 +226,19 @@ class GameLauncherUI:
 
     def launch_game(self, zone, ticket):
         exe_path = get_exe_path(self.game_op_var.get())
-        args = (
-            f"-wegame=1,1,{zone['ip']},{zone['port']},1,1,{zone['ip']},{zone['port']},{zone['name']} "
-            f"/ip:1,1,{zone['ip']} /port:{zone['port']} "
-            f"/ticket:{ticket} /AreaName:{zone['name']}"
-        )
-        subprocess.Popen([exe_path] + args.split(), cwd=os.path.dirname(exe_path))
+        try:
+            start_game_process(exe_path, zone, ticket)
+        except OSError as error:
+            if getattr(error, "winerror", None) == 1223:  # user declined the UAC prompt
+                messagebox.showwarning("未启动", "已取消管理员权限确认，游戏未启动。")
+            else:
+                messagebox.showerror("启动失败", f"{error}\n\n游戏路径: {exe_path}")
+        except Exception as error:
+            messagebox.showerror("启动失败", str(error))
+
+    def report_callback_error(self, kind, error, tb):
+        """The packaged launcher has no console, so show callback errors instead of swallowing them."""
+        messagebox.showerror("登录器错误", f"{kind.__name__}: {error}")
 
     def _labeled_entry(self, parent, text, **entry_kw):
         tb.Label(parent, text=text, font=self.base_font).pack(anchor=W, pady=(10, 4))
